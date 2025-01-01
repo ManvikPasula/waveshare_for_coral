@@ -1,0 +1,2 @@
+This is to allow the Waveshare displays to work with the Google Coral DevBoard mini, but should also work with the normal DevBoard as well. Primarily, it is designed for the 1.51 inch transparent OLED display, but you can convert it to make the other displays work as well. 
+Credit for most of the original stuff goes to Waveshare, which you can find here https://files.waveshare.com/upload/2/2c/OLED_Module_Code.7z, and then I made the changes that allowed the Coral to work with it. 
