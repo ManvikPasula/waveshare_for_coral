@@ -84,8 +84,12 @@ class OLED_1in51(config.CoralDevice):
                     newx = y
                     newy = self.height - x - 1
                     if pixels[x, y] == 0:
-                        buf[newx + (newy // 8) * self.width] &= ~(1 << (y % 8))
+                        buf[(newx + (newy // 8) * self.width)] &= ~(1 << (y % 8))
+        
+        # Debug: Print buffer values
+        print(f"DEBUG: Generated buffer = {buf}")
         return buf
+
 
     def ShowImage(self, pBuf):
         for page in range(0, 8):
