@@ -95,15 +95,22 @@ class OLED_1in51(config.CoralDevice):
             self.command(0x00)
             # Set high column address
             self.command(0x10)
+            # Debug: Print the current page being sent
+            print(f"DEBUG: Sending data for page {page}")
             # Write data
             time.sleep(0.01)
             if self.Device == Device_SPI:
                 self.digital_write(self.DC_PIN, True)
             for i in range(0, self.width):
+                # Debug: Print the raw and masked value for each byte sent
+                raw_value = ~pBuf[i + self.width * page]
+                masked_value = raw_value & 0xFF
+                print(f"DEBUG: Page {page}, Column {i}: Raw value={raw_value}, Masked value={masked_value}")
                 if self.Device == Device_SPI:
-                    self.spi_writebyte([~pBuf[i + self.width * page]])
+                    # Ensure data is in the range [0, 255]
+                    self.spi_writebyte([masked_value])
                 else:
-                    self.i2c_writebyte(0x40, ~pBuf[i + self.width * page])
+                    self.i2c_writebyte(0x40, masked_value)
 
     def clear(self):
         """Clear contents of image buffer"""
