@@ -152,6 +152,7 @@ if __name__ == "__main__":
 
         # Display the image
         disp.ShowImage(buffer)
+        time.sleep(3)
         logging.info("Image displayed successfully.")
 
     except Exception as e:
