@@ -1,85 +1,94 @@
-from . import coral_config as config
+from periphery import GPIO, SPI, I2C
 import time
-import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+import logging
 
-Device_SPI = config.Device_SPI
-Device_I2C = config.Device_I2C
+# Constants for SPI and I2C
+Device_SPI = 1
+Device_I2C = 0
 
-OLED_WIDTH = 128  # OLED width
-OLED_HEIGHT = 64  # OLED height
+# OLED Dimensions
+OLED_WIDTH = 128
+OLED_HEIGHT = 64
 
-class OLED_1in51(config.CoralDevice):
-    """ Write register address and data """
+class CoralDevice:
+    def __init__(self, spi_device="/dev/spidev0.0", spi_freq=10000000, rst_pin=27, dc_pin=25, bl_pin=18, i2c_device=None):
+        self.Device = Device_SPI if spi_device else Device_I2C
+        self.SPEED = spi_freq
+        self.RST_PIN = GPIO("/dev/gpiochip0", rst_pin, "out")
+        self.DC_PIN = GPIO("/dev/gpiochip0", dc_pin, "out")
+        self.spi = SPI(spi_device, 0, self.SPEED) if self.Device == Device_SPI else None
+        self.i2c = I2C(i2c_device) if self.Device == Device_I2C else None
 
-    def command(self, cmd):
+    def digital_write(self, pin, value):
+        pin.write(value)
+
+    def spi_writebyte(self, data):
         if self.Device == Device_SPI:
-            self.digital_write(self.DC_PIN, False)
+            self.spi.transfer(bytearray(data))
+
+    def i2c_writebyte(self, reg, value):
+        if self.Device == Device_I2C:
+            self.i2c.transfer(0x3C, [reg, value])
+
+    def module_exit(self):
+        self.RST_PIN.write(0)
+        self.DC_PIN.write(0)
+        if self.Device == Device_SPI:
+            self.spi.close()
+        if self.Device == Device_I2C:
+            self.i2c.close()
+        self.RST_PIN.close()
+        self.DC_PIN.close()
+
+class OLED_1in51(CoralDevice):
+    def command(self, cmd):
+        self.digital_write(self.DC_PIN, 0)
+        if self.Device == Device_SPI:
             self.spi_writebyte([cmd])
         else:
             self.i2c_writebyte(0x00, cmd)
 
     def Init(self):
-        if self.module_init() != 0:
-            print("ERROR: Module initialization failed")
+        if self.Device == Device_SPI and not self.spi:
+            logging.error("SPI device not initialized.")
             return -1
 
         self.width = OLED_WIDTH
         self.height = OLED_HEIGHT
 
-        print("INFO: Initializing display...")
+        logging.info("Initializing display...")
         self.reset()
         self.command(0xAE)  # Turn off OLED panel
-
-        # Add other commands as required
-        # ...
-
-        self.command(0xAF)  # Turn on OLED panel
-        print("INFO: Display initialized successfully")
-
-
-        self.width = OLED_WIDTH
-        self.height = OLED_HEIGHT
-
-        """Initialize display"""
-        self.reset()
-        self.command(0xAE)  # --turn off oled panel
-
-        self.command(0x00)  # ---set low column address
-        self.command(0x10)  # ---set high column address
-
-        self.command(0x20)
-        self.command(0x00)
-
-        self.command(0xFF)
-        self.command(0xA6)
-
-        self.command(0xA8)
+        self.command(0x00)  # Set low column address
+        self.command(0x10)  # Set high column address
+        self.command(0xB0)  # Set page address
+        self.command(0x81)  # Set contrast control
+        self.command(0xCF)
+        self.command(0xA1)  # Set segment remap
+        self.command(0xC8)  # Set COM output scan direction
+        self.command(0xA6)  # Set normal display
+        self.command(0xA8)  # Set multiplex ratio
         self.command(0x3F)
-
-        self.command(0xD3)
+        self.command(0xD3)  # Set display offset
         self.command(0x00)
-
-        self.command(0xD5)
+        self.command(0xD5)  # Set display clock divide ratio
         self.command(0x80)
-
-        self.command(0xD9)
-        self.command(0x22)
-
-        self.command(0xDA)
+        self.command(0xD9)  # Set pre-charge period
+        self.command(0xF1)
+        self.command(0xDA)  # Set COM pins hardware configuration
         self.command(0x12)
-
-        self.command(0xDB)
+        self.command(0xDB)  # Set VCOMH
         self.command(0x40)
-        time.sleep(0.1)
-        self.command(0xAF)  # --turn on oled panel
+        self.command(0xAF)  # Turn on OLED panel
+        logging.info("Display initialized successfully.")
 
     def reset(self):
-        """Reset the display"""
-        self.digital_write(self.RST_PIN, True)
+        self.digital_write(self.RST_PIN, 1)
         time.sleep(0.1)
-        self.digital_write(self.RST_PIN, False)
+        self.digital_write(self.RST_PIN, 0)
         time.sleep(0.1)
-        self.digital_write(self.RST_PIN, True)
+        self.digital_write(self.RST_PIN, 1)
         time.sleep(0.1)
 
     def getbuffer(self, image):
@@ -93,45 +102,59 @@ class OLED_1in51(config.CoralDevice):
                 for x in range(imwidth):
                     if pixels[x, y] == 0:
                         buf[x + (y // 8) * self.width] &= ~(1 << (y % 8))
-        elif imwidth == self.height and imheight == self.width:
-            for y in range(imheight):
-                for x in range(imwidth):
-                    newx = y
-                    newy = self.height - x - 1
-                    if pixels[x, y] == 0:
-                        buf[(newx + (newy // 8) * self.width)] &= ~(1 << (y % 8))
-        
-        # Debug: Print buffer values
-        print(f"DEBUG: Generated buffer = {buf}")
         return buf
-
 
     def ShowImage(self, pBuf):
         for page in range(0, 8):
-            # Set page address
             self.command(0xB0 + page)
-            # Set low column address
-            self.command(0x00)
-            # Set high column address
-            self.command(0x10)
-            # Debug: Print the current page being sent
-            print(f"DEBUG: Sending data for page {page}")
-            # Write data
-            time.sleep(0.01)
+            self.command(0x00)  # Set low column address
+            self.command(0x10)  # Set high column address
             if self.Device == Device_SPI:
-                self.digital_write(self.DC_PIN, True)
-            for i in range(0, self.width):
-                # Debug: Print the raw and masked value for each byte sent
-                raw_value = ~pBuf[i + self.width * page]
-                masked_value = raw_value & 0xFF
-                print(f"DEBUG: Page {page}, Column {i}: Raw value={raw_value}, Masked value={masked_value}")
-                if self.Device == Device_SPI:
-                    # Ensure data is in the range [0, 255]
-                    self.spi_writebyte([masked_value])
-                else:
-                    self.i2c_writebyte(0x40, masked_value)
+                self.digital_write(self.DC_PIN, 1)
+                self.spi_writebyte(pBuf[self.width * page:self.width * (page + 1)])
 
     def clear(self):
-        """Clear contents of image buffer"""
         _buffer = [0xFF] * (self.width * self.height // 8)
         self.ShowImage(_buffer)
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
+    disp = OLED_1in51()
+    disp.Init()
+
+    try:
+        logging.info("Clearing display...")
+        disp.clear()
+
+        # Create an image with Pillow
+        logging.info("Creating an image...")
+        image = Image.new("1", (OLED_WIDTH, OLED_HEIGHT), "white")  # Create a blank white image
+        draw = ImageDraw.Draw(image)
+
+        # Draw a rectangle
+        draw.rectangle((10, 10, 60, 30), outline="black", fill="black")
+
+        # Draw a circle
+        draw.ellipse((70, 10, 110, 50), outline="black", fill="white")
+
+        # Draw text (optional)
+        try:
+            font = ImageFont.truetype("arial.ttf", 12)  # Adjust font size and path as needed
+        except IOError:
+            logging.warning("Font not found. Using default font.")
+            font = ImageFont.load_default()
+
+        draw.text((10, 40), "Hello, OLED!", font=font, fill="black")
+
+        # Convert the image to a buffer
+        buffer = disp.getbuffer(image)
+
+        # Display the image
+        disp.ShowImage(buffer)
+        logging.info("Image displayed successfully.")
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+    finally:
+        disp.module_exit()
