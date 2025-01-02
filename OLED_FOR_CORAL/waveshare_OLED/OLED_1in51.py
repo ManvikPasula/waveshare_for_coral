@@ -1,62 +1,42 @@
-from periphery import GPIO, SPI, I2C
 import time
+import board
+import digitalio
+import busio
 from PIL import Image, ImageDraw, ImageFont
 import logging
-
-# Constants for SPI and I2C
-Device_SPI = 1
-Device_I2C = 0
 
 # OLED Dimensions
 OLED_WIDTH = 128
 OLED_HEIGHT = 64
 
-class CoralDevice:
-    def __init__(self, spi_device="/dev/spidev0.0", spi_freq=10000000, rst_pin=27, dc_pin=25, bl_pin=18, i2c_device=None):
-        self.Device = Device_SPI if spi_device else Device_I2C
-        self.SPEED = spi_freq
-        self.RST_PIN = GPIO("/dev/gpiochip0", rst_pin, "out")
-        self.DC_PIN = GPIO("/dev/gpiochip0", dc_pin, "out")
-        self.spi = SPI(spi_device, 0, self.SPEED) if self.Device == Device_SPI else None
-        self.i2c = I2C(i2c_device) if self.Device == Device_I2C else None
+class OLED_1in51:
+    def __init__(self):
+        # Initialize SPI
+        self.spi = busio.SPI(board.SCLK, MOSI=board.MOSI)
+        self.dc = digitalio.DigitalInOut(board.D25)
+        self.dc.direction = digitalio.Direction.OUTPUT
+        self.rst = digitalio.DigitalInOut(board.D27)
+        self.rst.direction = digitalio.Direction.OUTPUT
+        self.cs = digitalio.DigitalInOut(board.D8)
+        self.cs.direction = digitalio.Direction.OUTPUT
 
-    def digital_write(self, pin, value):
-        pin.write(bool(value))
-
-    def spi_writebyte(self, data):
-        if self.Device == Device_SPI:
-            self.spi.transfer(bytearray(data))
-
-    def i2c_writebyte(self, reg, value):
-        if self.Device == Device_I2C:
-            self.i2c.transfer(0x3C, [reg, value])
-
-    def module_exit(self):
-        self.RST_PIN.write(False)
-        self.DC_PIN.write(False)
-        if self.Device == Device_SPI:
-            self.spi.close()
-        if self.Device == Device_I2C:
-            self.i2c.close()
-        self.RST_PIN.close()
-        self.DC_PIN.close()
-
-class OLED_1in51(CoralDevice):
-    def command(self, cmd):
-        self.digital_write(self.DC_PIN, 0)
-        if self.Device == Device_SPI:
-            self.spi_writebyte([cmd])
-        else:
-            self.i2c_writebyte(0x00, cmd)
-
-    def Init(self):
-        if self.Device == Device_SPI and not self.spi:
-            logging.error("SPI device not initialized.")
-            return -1
-
+        # Set OLED dimensions
         self.width = OLED_WIDTH
         self.height = OLED_HEIGHT
 
+    def command(self, cmd):
+        self.dc.value = 0  # Command mode
+        self.cs.value = 0
+        self.spi.write(bytearray([cmd]))
+        self.cs.value = 1
+
+    def data(self, data):
+        self.dc.value = 1  # Data mode
+        self.cs.value = 0
+        self.spi.write(bytearray(data))
+        self.cs.value = 1
+
+    def Init(self):
         logging.info("Initializing display...")
         self.reset()
         self.command(0xAE)  # Turn off OLED panel
@@ -84,11 +64,11 @@ class OLED_1in51(CoralDevice):
         logging.info("Display initialized successfully.")
 
     def reset(self):
-        self.digital_write(self.RST_PIN, True)
+        self.rst.value = 1
         time.sleep(0.1)
-        self.digital_write(self.RST_PIN, False)
+        self.rst.value = 0
         time.sleep(0.1)
-        self.digital_write(self.RST_PIN, True)
+        self.rst.value = 1
         time.sleep(0.1)
 
     def getbuffer(self, image):
@@ -109,9 +89,7 @@ class OLED_1in51(CoralDevice):
             self.command(0xB0 + page)
             self.command(0x00)  # Set low column address
             self.command(0x10)  # Set high column address
-            if self.Device == Device_SPI:
-                self.digital_write(self.DC_PIN, True)
-                self.spi_writebyte(pBuf[self.width * page:self.width * (page + 1)])
+            self.data(pBuf[self.width * page:self.width * (page + 1)])
 
     def clear(self):
         _buffer = [0xFF] * (self.width * self.height // 8)
@@ -157,4 +135,4 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"An error occurred: {e}")
     finally:
-        disp.module_exit()
+        logging.info("Exiting.")
