@@ -20,7 +20,22 @@ class OLED_1in51(config.CoralDevice):
 
     def Init(self):
         if self.module_init() != 0:
+            print("ERROR: Module initialization failed")
             return -1
+
+        self.width = OLED_WIDTH
+        self.height = OLED_HEIGHT
+
+        print("INFO: Initializing display...")
+        self.reset()
+        self.command(0xAE)  # Turn off OLED panel
+
+        # Add other commands as required
+        # ...
+
+        self.command(0xAF)  # Turn on OLED panel
+        print("INFO: Display initialized successfully")
+
 
         self.width = OLED_WIDTH
         self.height = OLED_HEIGHT
