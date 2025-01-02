@@ -21,7 +21,7 @@ class CoralDevice:
         self.i2c = I2C(i2c_device) if self.Device == Device_I2C else None
 
     def digital_write(self, pin, value):
-        pin.write(value)
+        pin.write(bool(value))
 
     def spi_writebyte(self, data):
         if self.Device == Device_SPI:
@@ -32,8 +32,8 @@ class CoralDevice:
             self.i2c.transfer(0x3C, [reg, value])
 
     def module_exit(self):
-        self.RST_PIN.write(0)
-        self.DC_PIN.write(0)
+        self.RST_PIN.write(False)
+        self.DC_PIN.write(False)
         if self.Device == Device_SPI:
             self.spi.close()
         if self.Device == Device_I2C:
@@ -84,11 +84,11 @@ class OLED_1in51(CoralDevice):
         logging.info("Display initialized successfully.")
 
     def reset(self):
-        self.digital_write(self.RST_PIN, 1)
+        self.digital_write(self.RST_PIN, True)
         time.sleep(0.1)
-        self.digital_write(self.RST_PIN, 0)
+        self.digital_write(self.RST_PIN, False)
         time.sleep(0.1)
-        self.digital_write(self.RST_PIN, 1)
+        self.digital_write(self.RST_PIN, True)
         time.sleep(0.1)
 
     def getbuffer(self, image):
@@ -110,7 +110,7 @@ class OLED_1in51(CoralDevice):
             self.command(0x00)  # Set low column address
             self.command(0x10)  # Set high column address
             if self.Device == Device_SPI:
-                self.digital_write(self.DC_PIN, 1)
+                self.digital_write(self.DC_PIN, True)
                 self.spi_writebyte(pBuf[self.width * page:self.width * (page + 1)])
 
     def clear(self):
