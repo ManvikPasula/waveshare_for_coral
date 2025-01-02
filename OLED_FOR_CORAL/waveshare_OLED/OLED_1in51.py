@@ -140,7 +140,7 @@ if __name__ == "__main__":
 
         # Draw text (optional)
         try:
-            font = ImageFont.truetype("arial.ttf", 12)  # Adjust font size and path as needed
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)  # Use DejaVu font
         except IOError:
             logging.warning("Font not found. Using default font.")
             font = ImageFont.load_default()
